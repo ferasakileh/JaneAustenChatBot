@@ -1,0 +1,16 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="marianne-bg" x1="10" y1="8" x2="110" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EDF2FB"/>
+      <stop offset="1" stop-color="#D7E2F6"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="60" fill="url(#marianne-bg)"/>
+  <circle cx="60" cy="46" r="18" fill="#F7E5DA"/>
+  <path d="M34 101C37 83 49 72 60 72C71 72 83 83 86 101" fill="#FBFCFD"/>
+  <path d="M41.5 42.8C42.3 28.6 51.2 20 60 20C69.4 20 78.4 26.8 79.2 42.4C73.6 36.6 66.7 33.5 60 33.5C53 33.5 46.5 37 41.5 42.8Z" fill="#5D4C5A"/>
+  <circle cx="53.5" cy="46.2" r="1.7" fill="#425667"/>
+  <circle cx="66.5" cy="46.2" r="1.7" fill="#425667"/>
+  <path d="M54 56C56.4 58.3 63.6 58.3 66 56" stroke="#C48A80" stroke-width="2" stroke-linecap="round"/>
+  <text x="60" y="111" text-anchor="middle" font-size="18" font-family="Georgia, serif" fill="#748EC1">M</text>
+</svg>

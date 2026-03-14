@@ -1,0 +1,16 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="emma-bg" x1="10" y1="8" x2="110" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EFF7F3"/>
+      <stop offset="1" stop-color="#D5E8E1"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="60" fill="url(#emma-bg)"/>
+  <circle cx="60" cy="46" r="18" fill="#F5E3D8"/>
+  <path d="M35 101C38 82 49 71 60 71C71 71 82 82 85 101" fill="#FBFCFC"/>
+  <path d="M41 43.8C42.5 28 51.5 20 60 20C68.5 20 77 25 79.2 41.8C74 37.4 67.8 34.8 60 34.8C52.4 34.8 46.7 37.6 41 43.8Z" fill="#8B6B57"/>
+  <circle cx="53.5" cy="46.5" r="1.7" fill="#435567"/>
+  <circle cx="66.5" cy="46.5" r="1.7" fill="#435567"/>
+  <path d="M54 56C56.8 58.2 63.2 58.2 66 56" stroke="#C58C81" stroke-width="2" stroke-linecap="round"/>
+  <text x="60" y="111" text-anchor="middle" font-size="18" font-family="Georgia, serif" fill="#7FA79A">E</text>
+</svg>
