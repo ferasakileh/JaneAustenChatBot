@@ -34,7 +34,7 @@ export default function RootLayout({
             <Link href="/" className="site-brand serif-display">
               Austen-Modern
             </Link>
-            <p className="site-tagline">Letters, wit, and modern conversation</p>
+            <p className="site-tagline">Modern conversation with the iconic characters of Jane Austen's novels</p>
           </div>
         </header>
         <main className="site-shell">{children}</main>

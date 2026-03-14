@@ -32,33 +32,86 @@ function formatTime(value: number) {
 
 const SESSION_KEY = "austen-modern-session-v1";
 
+const POSITIVE_PATTERNS: Array<[RegExp, number]> = [
+  [/\b(please|thank you|thanks|kindly|pardon|forgive me|if you please)\b/gi, 2.6],
+  [/\b(i appreciate|grateful|that means a lot|very kind)\b/gi, 2.2],
+  [/\b(perhaps|might|may|would you|could you)\b/gi, 1.1],
+  [/\b(sorry|apologies|my mistake|i was wrong)\b/gi, 2.4],
+  [/\b(dear|lovely|delightful|splendid)\b/gi, 1.4],
+];
+
+const NEGATIVE_PATTERNS: Array<[RegExp, number]> = [
+  [/\b(shut up|idiot|stupid|moron)\b/gi, -8.5],
+  [/\b(damn|hell|wtf)\b/gi, -3.6],
+  [/\b(lol|lmao|bruh|omg)\b/gi, -1.5],
+  [/[!?]{3,}/g, -2.8],
+  [/\b[A-Z]{5,}\b/g, -2.4],
+];
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function countMatches(text: string, pattern: RegExp) {
+  return text.match(pattern)?.length ?? 0;
+}
+
+function scoreSingleMessage(
+  message: ChatMessage,
+  idx: number,
+  total: number,
+) {
+  const text = message.content;
+  const len = Math.max(1, text.length);
+
+  let delta = 0;
+
+  for (const [pattern, weight] of POSITIVE_PATTERNS) {
+    delta += countMatches(text, pattern) * weight;
+  }
+
+  for (const [pattern, weight] of NEGATIVE_PATTERNS) {
+    delta += countMatches(text, pattern) * weight;
+  }
+
+  const emojiCount =
+    text.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu)?.length ?? 0;
+  if (emojiCount > 4) delta -= (emojiCount - 4) * 0.8;
+
+  const upperChars = (text.match(/[A-Z]/g)?.length ?? 0);
+  const alphaChars = (text.match(/[A-Za-z]/g)?.length ?? 1);
+  const upperRatio = upperChars / alphaChars;
+  if (upperRatio > 0.45 && alphaChars > 10) delta -= 3.2;
+
+  // Slight recency weighting: newer messages affect score more.
+  const recencyWeight = total <= 1 ? 1 : 0.65 + (idx / (total - 1)) * 0.35;
+
+  // User tone should count a bit more than assistant tone.
+  const roleWeight = message.role === "user" ? 1.1 : 0.9;
+
+  // Tiny normalization by length to avoid huge swings from long messages.
+  const lengthFactor = clamp(220 / (len + 60), 0.55, 1.15);
+
+  return delta * recencyWeight * roleWeight * lengthFactor;
+}
+
 function calculateProprietyScore(messages: ChatMessage[]) {
   if (messages.length === 0) return 88;
 
-  const recent = messages.slice(-24);
+  const recent = messages.slice(-30);
   let score = 82;
 
-  for (const message of recent) {
-    const text = message.content;
-
-    const polite = (text.match(/\b(please|thank you|forgive|dear|kindly|appreciate|pardon)\b/gi)?.length ?? 0);
-    const rude = (text.match(/\b(shut up|idiot|stupid|damn|hell)\b/gi)?.length ?? 0);
-    const slang = (text.match(/\b(omg|lol|lmao|wtf|bruh)\b/gi)?.length ?? 0);
-    const emphatic = text.match(/[!?]{3,}/g)?.length ?? 0;
-    const caps = text.match(/\b[A-Z]{4,}\b/g)?.length ?? 0;
-    const emoji = text.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu)?.length ?? 0;
-
-    score += polite * 1.8;
-    score -= rude * 6.2;
-    score -= slang * 1.7;
-    score -= emphatic * 2.6;
-    score -= caps * 1.8;
-    score -= Math.max(0, emoji - 3) * 0.8;
-
-    if (/\b(sorry|apologies|forgive me)\b/i.test(text)) score += 1.2;
+  for (let i = 0; i < recent.length; i++) {
+    score += scoreSingleMessage(recent[i], i, recent.length);
   }
 
-  return Math.max(35, Math.min(99, Math.round(score)));
+  // Balance bonus: polite back-and-forth usually reads more proper.
+  const userCount = recent.filter((m) => m.role === "user").length;
+  const assistantCount = recent.length - userCount;
+  const balance = 1 - Math.abs(userCount - assistantCount) / Math.max(1, recent.length);
+  score += balance * 3.5;
+
+  return Math.round(clamp(score, 30, 99));
 }
 
 function getProprietyLabel(score: number) {
@@ -103,6 +156,7 @@ export default function Home() {
   const [isSending, setIsSending] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
 
   const activeCharacter = selectedCharacterId
     ? getCharacterById(selectedCharacterId)
@@ -138,6 +192,14 @@ export default function Home() {
       behavior: "smooth",
     });
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    // smoother and more reliable bottom anchoring while streaming
+    endRef.current?.scrollIntoView({
+      behavior: isTyping || isSending ? "auto" : "smooth",
+      block: "end",
+    });
+  }, [messages, isTyping, isSending]);
 
   useEffect(() => {
     try {
@@ -341,8 +403,8 @@ export default function Home() {
 
   return (
     <div className="h-full px-2 py-2 sm:px-3 sm:py-3 lg:px-4">
-      <div className="mx-auto flex min-h-[calc(100dvh-86px)] w-full max-w-7xl flex-col gap-3 xl:flex-row">
-        <section className="glass-panel order-1 flex min-h-[62dvh] flex-1 flex-col overflow-hidden rounded-[1.6rem] border border-white/70 shadow-[0_22px_60px_rgba(84,106,132,0.14)] xl:min-h-[74dvh]">
+      <div className="mx-auto flex min-h-[calc(100dvh-86px)] w-full max-w-5xl flex-col gap-3">
+        <section className="glass-panel order-1 flex min-h-[72dvh] flex-1 flex-col overflow-hidden rounded-[1.6rem] border border-white/70 shadow-[0_22px_60px_rgba(84,106,132,0.14)]">
           <header className="border-b border-[var(--line)] px-3 py-3 sm:px-5">
             <div className="flex items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-3">
@@ -391,6 +453,35 @@ export default function Home() {
               </div>
             </div>
           </header>
+
+          {/* integrated insights (no detached sidebar) */}
+          <div className="border-b border-[var(--line)] px-3 py-3 sm:px-5">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div
+                className="rounded-2xl border border-white/80 p-3"
+                style={{ backgroundColor: activeCharacter?.surfaceTint ?? "#f0f5f8" }}
+              >
+                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500">
+                  Current Propriety Score
+                </p>
+                <div className="mt-1 flex items-end justify-between gap-2">
+                  <span className="serif-display text-3xl text-slate-900">
+                    {proprietyScore}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {getProprietyLabel(proprietyScore)}
+                  </span>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/70">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#c8d9e9] via-[#9db8d0] to-[#6f8da7]"
+                    style={{ width: `${proprietyScore}%` }}
+                  />
+                </div>
+              </div>
+
+            </div>
+          </div>
 
           <div
             ref={scrollRef}
@@ -461,34 +552,24 @@ export default function Home() {
                 </motion.div>
               ) : null}
             </AnimatePresence>
+
+            <div ref={endRef} />
           </div>
 
-          <div className="border-t border-[var(--line)] px-3 py-3 sm:px-5">
-            <div className="mb-3 rounded-2xl border border-white/70 bg-white/70 px-3 py-2 xl:hidden">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                Current Propriety Score
-              </p>
-              <div className="mt-1 flex items-center justify-between">
-                <span className="serif-display text-2xl text-slate-900">{proprietyScore}</span>
-                <span className="text-xs text-slate-500">{getProprietyLabel(proprietyScore)}</span>
-              </div>
+          <div className="sticky bottom-0 border-t border-[var(--line)] bg-white/70 px-3 py-3 backdrop-blur-sm sm:px-5">
+            <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+              {activeCharacter?.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  disabled={isSending}
+                  onClick={() => void sendMessage(suggestion)}
+                  className="shrink-0 rounded-full border border-slate-200 bg-white/80 px-3 py-2 text-sm text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {suggestion}
+                </button>
+              ))}
             </div>
-
-            {activeCharacter ? (
-              <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-                {activeCharacter.suggestions.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    disabled={isSending}
-                    onClick={() => void sendMessage(suggestion)}
-                    className="shrink-0 rounded-full border border-slate-200 bg-white/80 px-3 py-2 text-sm text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            ) : null}
 
             <form onSubmit={handleSubmit} className="flex items-end gap-2">
               <label htmlFor="message" className="sr-only">
@@ -517,63 +598,6 @@ export default function Home() {
             </form>
           </div>
         </section>
-
-        <aside className="glass-panel order-2 hidden w-full rounded-[1.6rem] border border-white/70 p-4 shadow-[0_20px_60px_rgba(84,106,132,0.10)] xl:block xl:min-h-[74dvh] xl:w-[300px]">
-          <div
-            className="rounded-[1.75rem] border border-white/80 p-5"
-            style={{
-              backgroundColor: activeCharacter?.surfaceTint ?? "#f0f5f8",
-            }}
-          >
-            <p className="text-xs font-medium uppercase tracking-[0.28em] text-slate-500">
-              Current Propriety Score
-            </p>
-            <div className="mt-4 flex items-end gap-3">
-              <span className="serif-display text-5xl text-slate-900">
-                {proprietyScore}
-              </span>
-              <span className="mb-1 text-sm text-slate-500">
-                {getProprietyLabel(proprietyScore)}
-              </span>
-            </div>
-
-            <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/70">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[#c8d9e9] via-[#9db8d0] to-[#6f8da7]"
-                style={{ width: `${proprietyScore}%` }}
-              />
-            </div>
-
-            <p className="mt-4 text-sm leading-7 text-slate-600">
-              Civility is recalculated from tone, emphasis, slang, and courtesy.
-            </p>
-          </div>
-
-          <div className="mt-4 rounded-[1.75rem] border border-white/80 bg-white/72 p-5">
-            <h2 className="serif-display text-2xl text-slate-900">
-              Conversation Notes
-            </h2>
-            <ul className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
-              {conversationNotes.map((note) => (
-                <li key={note} className="rounded-2xl bg-slate-50/80 px-4 py-3">
-                  {note}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {responseMode === "fallback" ? (
-            <div className="mt-4 rounded-[1.75rem] border border-amber-200 bg-amber-50/90 p-5">
-              <h2 className="serif-display text-2xl text-amber-900">
-                Local Austen mode
-              </h2>
-              <p className="mt-3 text-sm leading-7 text-amber-800">
-                API quota is unavailable, so replies are being generated locally
-                from the Austen voice rules and quote retrieval layer.
-              </p>
-            </div>
-          ) : null}
-        </aside>
       </div>
 
       <AnimatePresence>
@@ -600,11 +624,6 @@ export default function Home() {
                     <h1 className="serif-display mt-2 text-3xl text-slate-900">
                       Choose a correspondent
                     </h1>
-                    <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-                      A mobile-first Austen thread with literary retrieval,
-                      polished character voice, typing indicators, read receipts,
-                      and live propriety scoring.
-                    </p>
                   </div>
 
                   {activeCharacter ? (
