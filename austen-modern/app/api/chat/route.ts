@@ -1,5 +1,5 @@
 import { groq } from "@ai-sdk/groq";
-import { streamText, type CoreMessage } from "ai";
+import { streamText, type ModelMessage } from "ai";
 import { getCharacterById, type CharacterId } from "@/lib/austen-data";
 import { formatRetrievedContext, retrieveAustenContext } from "@/lib/rag";
 
@@ -62,7 +62,7 @@ ${retrievedContext || "No direct context retrieved. Use character voice and conv
     system: systemPrompt,
     temperature: 0.8,
     messages: body.messages.map(
-      (message): CoreMessage => ({
+      (message): ModelMessage => ({
         role: message.role,
         content: message.content,
       }),
